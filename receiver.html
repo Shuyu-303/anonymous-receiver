@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>匿名接收 - Receiver</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Screen helpers ── */
+    .screen { display: none; width: 100%; max-width: 600px; height: 100vh; }
+    .screen.active { display: flex; flex-direction: column; }
+
+    /* ── Main Screen (Conversation List) ── */
+    #main-screen { padding: 0; }
+    #main-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      background: #1a1a2e;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+    }
+    #main-header h1 {
+      font-size: 20px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    #main-header .stats {
+      font-size: 12px;
+      color: #888;
+    }
+    #main-header .stats span { color: #4caf50; font-weight: 600; }
+
+    /* Empty state */
+    #empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      gap: 12px;
+    }
+    #empty-state .icon { font-size: 56px; opacity: 0.5; }
+    #empty-state .text { font-size: 16px; }
+    #empty-state .sub-text { font-size: 13px; color: #444; }
+
+    #empty-state.hidden { display: none; }
+
+    /* Sender list */
+    #sender-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    #sender-list::-webkit-scrollbar { width: 5px; }
+    #sender-list::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
+
+    .sender-card {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid #1a1a2e;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .sender-card:hover { background: #1a1a2e; }
+    .sender-card .avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea44, #764ba244);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #667eea;
+      margin-right: 14px;
+      flex-shrink: 0;
+    }
+    .sender-card .info { flex: 1; min-width: 0; }
+    .sender-card .info .name {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .sender-card .info .preview {
+      font-size: 13px;
+      color: #777;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sender-card .info .preview .time-tag {
+      color: #555;
+      margin-left: 8px;
+    }
+    .sender-card .badge-new {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #667eea;
+      flex-shrink: 0;
+      margin-left: 10px;
+    }
+    .sender-card .badge-new.hidden { visibility: hidden; }
+
+    /* ── Conversation Detail Screen ── */
+    #detail-screen { max-width: 700px; }
+    #detail-header {
+      display: flex; align-items: center;
+      padding: 12px 16px;
+      background: #1a1a2e;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    #back-btn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+    #back-btn:hover { background: #2a2a4a; }
+    #detail-header .right { flex: 1; }
+    #detail-header .right .name {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    #detail-header .right .code-tag {
+      font-size: 12px;
+      color: #888;
+    }
+    #detail-header .right .code-tag span { color: #667eea; }
+    #detail-header .msg-count {
+      font-size: 12px;
+      color: #888;
+    }
+
+    #detail-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #detail-messages::-webkit-scrollbar { width: 5px; }
+    #detail-messages::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
+
+    .msg {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .msg.received {
+      align-self: flex-start;
+      background: #2a2a4a;
+      border-bottom-left-radius: 4px;
+    }
+    .msg .time {
+      font-size: 10px;
+      color: #666;
+      margin-top: 4px;
+      text-align: right;
+    }
+    .msg.system {
+      align-self: center;
+      background: transparent;
+      font-size: 12px;
+      color: #666;
+      padding: 4px 12px;
+    }
+
+    .conversation-start {
+      text-align: center;
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 12px;
+      padding: 8px;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #333;
+      color: #e0e0e0;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      opacity: 0;
+      transition: all 0.3s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Responsive ── */
+    @media (max-width: 500px) {
+      #main-screen, #detail-screen { height: 100dvh; }
+      .msg { max-width: 90%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── TOAST ─── -->
+  <div id="toast" class="toast"></div>
+
+  <!-- ─── MAIN SCREEN ─── -->
+  <div id="main-screen" class="screen active">
+    <div id="main-header">
+      <h1>📥 匿名消息接收</h1>
+      <div class="stats">👤 发送者: <span id="sender-count">0</span></div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="empty-state">
+      <div class="icon">📭</div>
+      <div class="text">暂无消息</div>
+      <div class="sub-text">还没有人给你发送消息...</div>
+    </div>
+
+    <!-- Sender list -->
+    <div id="sender-list"></div>
+  </div>
+
+  <!-- ─── CONVERSATION DETAIL SCREEN ─── -->
+  <div id="detail-screen" class="screen">
+    <div id="detail-header">
+      <button id="back-btn">←</button>
+      <div class="right">
+        <div class="name" id="detail-name">用户</div>
+        <div class="code-tag">代码: <span id="detail-code">------</span></div>
+      </div>
+      <div class="msg-count" id="detail-msg-count">0 条消息</div>
+    </div>
+
+    <div id="detail-messages"></div>
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════
+    // Firebase REST API Base URL
+    // ══════════════════════════════════════════
+    const FB_URL = 'https://bday16-6e803-default-rtdb.firebaseio.com';
+
+    // ─── DOM refs ───
+    const emptyState     = document.getElementById('empty-state');
+    const senderList     = document.getElementById('sender-list');
+    const senderCount    = document.getElementById('sender-count');
+    const mainScreen     = document.getElementById('main-screen');
+    const detailScreen   = document.getElementById('detail-screen');
+    const backBtn        = document.getElementById('back-btn');
+    const detailName     = document.getElementById('detail-name');
+    const detailCode     = document.getElementById('detail-code');
+    const detailMsgCount = document.getElementById('detail-msg-count');
+    const detailMessages = document.getElementById('detail-messages');
+    const toast          = document.getElementById('toast');
+
+    // ─── State ───
+    // knownMessages: { senderCode: { key: msg, ... } }
+    const knownMessages = {};
+    let activeSenderCode = null;
+    let pollTimer = null;
+
+    // ─── Helpers ───
+    function escapeHtml(t) {
+      const d = document.createElement('div');
+      d.textContent = t;
+      return d.innerHTML;
+    }
+
+    function showToast(msg, duration) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toast._hide);
+      toast._hide = setTimeout(() => toast.classList.remove('show'), duration || 2500);
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts);
+      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDate(ts) {
+      const d = new Date(ts);
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      if (isToday) return formatTime(ts);
+      return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + formatTime(ts);
+    }
+
+    // ══════════════════════════════════════════
+    // Poll all messages from Firebase
+    // ══════════════════════════════════════════
+    async function fetchAllMessages() {
+      try {
+        const res = await fetch(`${FB_URL}/messages.json`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.error('Fetch error:', err);
+        return null;
+      }
+    }
+
+    // Group messages by senderCode and update state
+    function processMessages(data) {
+      if (!data) return;
+
+      let hasChanges = false;
+
+      for (const [key, msg] of Object.entries(data)) {
+        const code = msg.senderCode;
+        if (!code) continue;
+
+        if (!knownMessages[code]) {
+          knownMessages[code] = {};
+        }
+        if (!knownMessages[code][key]) {
+          knownMessages[code][key] = msg;
+          knownMessages[code][key]._key = key;
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        renderSenderList();
+        // If viewing a conversation, refresh it
+        if (activeSenderCode && knownMessages[activeSenderCode]) {
+          renderConversation(activeSenderCode);
+        }
+      }
+    }
+
+    async function poll() {
+      const data = await fetchAllMessages();
+      processMessages(data);
+    }
+
+    // ══════════════════════════════════════════
+    // Render sender list
+    // ══════════════════════════════════════════
+    function renderSenderList() {
+      const codes = Object.keys(knownMessages);
+      senderCount.textContent = codes.length;
+
+      if (codes.length === 0) {
+        emptyState.classList.remove('hidden');
+        senderList.innerHTML = '';
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      // Build sender summaries: code → { name, lastMsg, lastTs, count }
+      const summaries = codes.map(code => {
+        const msgs = Object.values(knownMessages[code]);
+        const sorted = msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const last = sorted[sorted.length - 1];
+        return {
+          code,
+          name: last ? last.senderName : '匿名',
+          lastText: last ? last.text : '',
+          lastTs: last ? last.timestamp : 0,
+          count: msgs.length
+        };
+      });
+
+      // Sort: most recent first
+      summaries.sort((a, b) => b.lastTs - a.lastTs);
+
+      senderList.innerHTML = summaries.map(s => {
+        const initial = s.name.charAt(0);
+        const timeStr = s.lastTs ? formatDate(s.lastTs) : '';
+        return `
+          <div class="sender-card" data-code="${escapeHtml(s.code)}">
+            <div class="avatar">${escapeHtml(initial)}</div>
+            <div class="info">
+              <div class="name">${escapeHtml(s.name)}${s.count > 0 ? ` <span style="color:#888;font-size:12px;font-weight:400;">${s.count}条</span>` : ''}</div>
+              <div class="preview">
+                ${escapeHtml(s.lastText ? s.lastText.substring(0, 40) : '')}
+                ${s.lastTs ? `<span class="time-tag">${timeStr}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Click handlers for sender cards
+      document.querySelectorAll('.sender-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const code = card.dataset.code;
+          openConversation(code);
+        });
+      });
+    }
+
+    // ══════════════════════════════════════════
+    // Open conversation detail
+    // ══════════════════════════════════════════
+    function openConversation(code) {
+      activeSenderCode = code;
+      const msgs = knownMessages[code];
+      if (!msgs) return;
+
+      const msgArr = Object.values(msgs);
+      msgArr.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      const firstMsg = msgArr[0];
+
+      detailName.textContent = firstMsg ? firstMsg.senderName : '匿名';
+      detailCode.textContent = code;
+      detailMsgCount.textContent = `${msgArr.length} 条消息`;
+
+      renderConversation(code);
+
+      mainScreen.classList.remove('active');
+      detailScreen.classList.add('active');
+    }
+
+    function renderConversation(code) {
+      const msgs = knownMessages[code];
+      if (!msgs) return;
+
+      const msgArr = Object.values(msgs);
+      msgArr.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+      detailMessages.innerHTML = '';
+
+      if (msgArr.length === 0) {
+        detailMessages.innerHTML = '<div class="conversation-start">暂无消息</div>';
+        return;
+      }
+
+      detailMessages.innerHTML = `<div class="conversation-start">—— 以下是与 ${escapeHtml(msgArr[0].senderName)} 的全部对话 ——</div>`;
+
+      for (const msg of msgArr) {
+        const div = document.createElement('div');
+        div.className = 'msg received';
+        div.innerHTML = `
+          <div>${escapeHtml(msg.text)}</div>
+          <div class="time">${msg.timestamp ? formatTime(msg.timestamp) : ''}</div>
+        `;
+        detailMessages.appendChild(div);
+      }
+
+      // Scroll to bottom
+      requestAnimationFrame(() => {
+        detailMessages.scrollTop = detailMessages.scrollHeight;
+      });
+    }
+
+    // ══════════════════════════════════════════
+    // Back button
+    // ══════════════════════════════════════════
+    backBtn.addEventListener('click', () => {
+      activeSenderCode = null;
+      detailScreen.classList.remove('active');
+      mainScreen.classList.add('active');
+      // Re-render sender list to reflect any new messages
+      renderSenderList();
+    });
+
+    // ══════════════════════════════════════════
+    // Initialize
+    // ══════════════════════════════════════════
+    async function init() {
+      await poll();
+      pollTimer = setInterval(poll, 2000);
+    }
+
+    init();
+
+    // ─── Cleanup ───
+    window.addEventListener('beforeunload', () => {
+      if (pollTimer) clearInterval(pollTimer);
+    });
+  </script>
+</body>
+</html>
